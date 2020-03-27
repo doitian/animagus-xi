@@ -10,12 +10,12 @@ local function make_query_condition(lock_arg)
 end
 
 local function balance(lock_arg)
-  return ast.reduce(
+  return animagus.reduce(
     function(a, b) return a + b end,
     0,
-    ast.map(
+    animagus.map(
       function(e) return e.capacity end,
-      ast.query_cells(make_query_condition(lock_arg))
+      animagus.query_cells(make_query_condition(lock_arg))
     )
   )
 end

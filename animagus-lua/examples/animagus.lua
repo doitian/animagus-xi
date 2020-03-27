@@ -1,6 +1,6 @@
-local ast = {}
+local animagus = {}
 
-function ast.reduce(reducer, init, list)
+function animagus.reduce(reducer, init, list)
   local acc = init
   for _, v in ipairs(list) do
     acc = reducer(acc, v)
@@ -8,7 +8,7 @@ function ast.reduce(reducer, init, list)
   return acc
 end
 
-function ast.map(transform, list)
+function animagus.map(transform, list)
   local res = {}
   for i, v in ipairs(list) do
     res[i] = transform(v)
@@ -17,7 +17,7 @@ function ast.map(transform, list)
   return res
 end
 
-function ast.query_cells(filter)
+function animagus.query_cells(filter)
   local cell = {
     capacity = 10,
     lock = {
@@ -34,4 +34,4 @@ function ast.query_cells(filter)
   end
 end
 
-return ast
+return animagus

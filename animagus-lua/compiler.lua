@@ -138,7 +138,7 @@ end
 
 function Scope:compile_expr(expr)
   if expr.tag == "Call" then
-    if expr[1][1][1] == "ast" then
+    if expr[1][1][1] == "animagus" then
       local method = "compile_" .. expr[1][2][1]
       assert(self[method], "Unknown ast call " .. ast_tostring(expr))
       return self[method](self, unpack(expr, 2))
