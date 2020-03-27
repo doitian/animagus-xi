@@ -123,17 +123,17 @@ end
 
 function Scope:compile_reducer(reducer)
   -- TODO
-  return {}
+  return { t = "REDUCER" }
 end
 
-function Scope:compile_mapper(reducer)
+function Scope:compile_mapper(mapper)
   -- TODO
-  return {}
+  return { t = "MAPPER" }
 end
 
 function Scope:compile_cell_filter(filter)
   -- TODO
-  return {}
+  return { t = "FILTER" }
 end
 
 function Scope:compile_expr(expr)
@@ -179,6 +179,9 @@ for _, kv in ipairs(root_ast) do
     end
   end
 end
+
+local json = require "json"
+print(json.encode(animagus_ast))
 
 
 -- block: { stat* }

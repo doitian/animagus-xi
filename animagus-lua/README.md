@@ -30,3 +30,46 @@ lua5.1 compiler.lua main.lua main.bin
 ## Example
 
 See examples.
+
+```
+lua5.1 animagus-lua/compiler.lua animagus-lua/examples/balance.lua | jq .
+```
+
+```json
+{
+  "streams": [],
+  "calls": [
+    {
+      "name": "balance",
+      "result": {
+        "children": [
+          {
+            "t": "REDUCER"
+          },
+          {
+            "u": 0,
+            "t": "UINT64"
+          },
+          {
+            "children": [
+              {
+                "t": "MAPPER"
+              },
+              {
+                "children": [
+                  {
+                    "t": "FILTER"
+                  }
+                ],
+                "t": "QUERY_CELLS"
+              }
+            ],
+            "t": "MAP"
+          }
+        ],
+        "t": "REDUCE"
+      }
+    }
+  ]
+}
+```
