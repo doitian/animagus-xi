@@ -1,14 +1,9 @@
-# animagus-sudt
+# animagus-xi
 
-sUDT building blocks for Animagus.
+Tools to make [Animagus](https://github.com/xxuejie/animagus) easy to use.
 
 ## Spec
 
-What this project will provide:
-
-* Building blocks to generate frequently used AST nodes for sUDT.
-* A wallet demo app.
-* A bundle of scripts to creating an Admin app, which can
-    * create an sUDT.
-    * manage the sUDT, such as issuance and burning.
-    * support different issuance and burning policies.
+* animagus-dot: Convert between Animagus AST and Graphviz dot.
+* animagus-unity3d: Build Animagus AST in Unity3D and render the GRPC result
+    in Unit3D.
