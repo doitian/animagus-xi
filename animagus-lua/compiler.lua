@@ -45,7 +45,7 @@ local function ast_tostring(ast, a)
 	return table.concat(res, "\n")
 end
 
-local animagus = {}
+local animagus = { G = {} }
 
 function animagus.reduce(scope, reducer, initial, list)
   return {
@@ -73,6 +73,26 @@ function animagus.query_cells(scope, filter)
     t = "QUERY_CELLS",
     children = {
       scope:compile_function(filter)
+    }
+  }
+end
+
+function animagus.slice(scope, target, start, length)
+  return {
+    t = "SLICE",
+    children = {
+      scope:compile_expr(target),
+      scope:compile_expr(start),
+      scope:compile_expr(length),
+    }
+  }
+end
+
+function animagus.G.len(scope, expr)
+  return {
+    t = "LEN",
+    children = {
+      scope:compile_expr(expr)
     }
   }
 end
@@ -151,7 +171,7 @@ end
 
 function Scope:compile_expr(expr)
   if expr.tag == "Id" then
-    local var = self.vars[expr[1]]
+    local var = assert(self.vars[expr[1]], "var " .. expr[1] .. " does not exist")
     var.compiled = var.compiled or self:compile_expr(var.expr)
     return var.compiled
   end
@@ -161,7 +181,7 @@ function Scope:compile_expr(expr)
     if type(callee) == "function" then
       return callee(self, unpack(expr, 2))
     else
-      assert(false, "Function not allowed here " .. ast_tostring(expr))
+      return self:call(callee, expr)
     end
   end
   if expr.tag == "Number" then
@@ -191,17 +211,29 @@ function Scope:compile_expr(expr)
       assert(target.t == "ARG")
       return { t = "GET_LOCK", children = target }
     end
+    if index[1] == "type" then
+      assert(target.t == "ARG")
+      return { t = "GET_TYPE", children = target }
+    end
     if index[1] == "code_hash" then
-      assert(target.t == "ARG" or target.t == "GET_LOCK")
+      assert(target.t == "ARG" or target.t == "GET_LOCK" or target.t == "GET_TYPE")
       return { t = "GET_CODE_HASH", children = target }
     end
     if index[1] == "hash_type" then
-      assert(target.t == "ARG" or target.t == "GET_LOCK")
+      assert(target.t == "ARG" or target.t == "GET_LOCK" or target.t == "GET_TYPE")
       return { t = "GET_HASH_TYPE", children = target }
     end
     if index[1] == "args" then
       assert(target.t == "ARG" or target.t == "GET_LOCK" or target.t == "GET_TYPE")
       return { t = "GET_ARGS", children = target }
+    end
+    if index[1] == "data" then
+      assert(target.t == "ARG")
+      return { t = "GET_DATA", children = target }
+    end
+    if index[1] == "data_hash" then
+      assert(target.t == "ARG")
+      return { t = "GET_DATA_HASH", children = target }
     end
   end
 
@@ -214,6 +246,9 @@ function Scope:resolve_expr(expr)
     if not found then
       if expr[1] == "animagus" then
         found = animagus
+      end
+      if expr[1] == "len" then
+        found = animagus.G.len
       end
     end
     return found
@@ -249,6 +284,21 @@ function Scope:resolve_expr(expr)
   end
 
   return { scope = self, expr = expr }
+end
+
+function Scope:call(callee, call)
+  assert(callee.expr.tag == "Function")
+  local scope = callee.scope:push()
+  local args, block = unpack(callee.expr)
+
+  for i, a in ipairs(args) do
+    scope.vars[a[1]] = self:resolve_expr(call[i + 1])
+  end
+  for _, stat in ipairs(block) do
+    scope:eval_stat(stat)
+  end
+
+  return scope:compile_expr(scope.ret.expr[1])
 end
 
 local function main(input_path, output_path, format)
