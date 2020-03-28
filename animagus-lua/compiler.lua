@@ -8,25 +8,25 @@ local OP_TABLE = {
 }
 
 local function ast_tostring(ast, a)
-	a = a or 0
-	local white = ("  "):rep(a+1)
-	local str = tostring(ast)
-	if str:sub(1, 7) ~= "table: " then
-	  return str
+  a = a or 0
+  local white = ("  "):rep(a+1)
+  local str = tostring(ast)
+  if str:sub(1, 7) ~= "table: " then
+    return str
   end
 
-	local res
-	if ast.tag then
-	  res = { "`" .. ast.tag .. " {" }
+  local res
+  if ast.tag then
+    res = { "`" .. ast.tag .. " {" }
   else
-	  res = { "{" }
+    res = { "{" }
   end
-	for k, v in ipairs(ast) do
-		table.insert(res,white .. ast_tostring(v, a + 1))
-	end
-	white = white:sub(3)
-	table.insert(res,white .. "}")
-	return table.concat(res, "\n")
+  for k, v in ipairs(ast) do
+    table.insert(res,white .. ast_tostring(v, a + 1))
+  end
+  white = white:sub(3)
+  table.insert(res,white .. "}")
+  return table.concat(res, "\n")
 end
 
 local animagus = { G = {} }

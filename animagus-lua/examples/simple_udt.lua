@@ -30,18 +30,18 @@ local function balance(sudt_arg, lock_arg)
     return filter_secp256k1_by_lock_arg(cell, lock_arg) and filter_sudt_by_type_arg(cell, lock_arg)
   end)
 
-	local tokens = animagus.map(
-		function(cell)
+  local tokens = animagus.map(
+    function(cell)
       return animagus.slice(cell.data, 0, 16)
     end,
-		cells
+    cells
   )
 
   return animagus.reduce(
     function(a, b) return a + b end,
     "0x00000000000000000000000000000000",
     tokens
-	)
+  )
 end
 
 return {
