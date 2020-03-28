@@ -10,7 +10,6 @@ Tools to make [Animagus](https://github.com/xxuejie/animagus) easy to use.
 ## Disclaimer
 
 This is a project to participate in an internal hackathon. I have created the [presentation](https://vimeo.com/401596884) in Vimeo.
-a presentation in Vimeo.
 
 ### Credits
 
