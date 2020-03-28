@@ -29,6 +29,10 @@ lua5.1 compiler.lua main.lua
 The parameter `main.lua` is the path to the input lua file. The compiler will print the
 Animagus AST JSON on screen.
 
+## Disclaimer
+
+This project is built in a Hackathon. The `compiler.lua` contains many tricks and is just enough to compile simple UDT example.
+
 ## Example
 
 See examples.
