@@ -23,4 +23,12 @@ clean:
 check-lua-global:
 	luac -p -l animagus-lua/compiler.lua | grep -o '_ENV.*' | sort | uniq
 
-.PHONY: default test test-dot clean
+step1: clean test
+
+step2:
+	lua5.1 animagus-lua/compiler.lua animagus-lua/examples/balance.lua | jq .
+
+step3:
+	lua5.1 animagus-lua/compiler.lua animagus-lua/examples/simple_udt.lua | jq .
+
+.PHONY: default test test-dot clean step1 step2 step3
