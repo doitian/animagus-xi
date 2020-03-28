@@ -2,6 +2,8 @@
 
 A lua compiler which target is the Animagus AST.
 
+![animagus-lua flowchart](https://raw.githubusercontent.com/doitian/assets/master/2020/0yO15v/chart.png)
+
 ## Dependencies
 
 * Lua 5.1
@@ -21,11 +23,11 @@ luarocks --lua-dir=/usr/local/opt/lua@5.1 install json4lua
 
 ```
 eval $(luarocks --lua-dir=/usr/local/opt/lua@5.1 path)
-lua5.1 compiler.lua main.lua main.bin
+lua5.1 compiler.lua main.lua
 ```
 
-- `main.lua` is the path to the input lua file
-- `main.bin` is the path to the generated AST file
+The parameter `main.lua` is the path to the input lua file. The compiler will print the
+Animagus AST JSON on screen.
 
 ## Example
 
@@ -75,6 +77,8 @@ lua5.1 animagus-lua/compiler.lua animagus-lua/examples/balance.lua | jq .
 ```
 
 ## MetaLua AST
+
+[※ source](https://github.com/fab13n/metalua/blob/master/README-parser.md)
 
 ```
 block: { stat* }
