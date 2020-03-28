@@ -20,4 +20,7 @@ animagus-dot/balance.bin: animagus/examples/balance/balance.bin
 clean:
 	rm -f animagus-dot/*.pdf animagus-dot/*.bin animagus-dot/*.dot
 
-.PHONY: default test test-dot
+check-lua-global:
+	luac -p -l animagus-lua/compiler.lua | grep -o '_ENV.*' | sort | uniq
+
+.PHONY: default test test-dot clean

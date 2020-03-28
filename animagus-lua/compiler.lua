@@ -1,4 +1,7 @@
-STAT_TAGS = {
+local json = require "json"
+local MetaluaCompiler = require "metalua.compiler"
+
+local STAT_TAGS = {
   Do = true,
   Set = true,
   While = true,
@@ -12,6 +15,12 @@ STAT_TAGS = {
   Label = true,
   Return = true,
   Break = true
+}
+
+local OP_TABLE = {
+  add = "ADD",
+  ["and"] = "AND",
+  eq = "EQUAL"
 }
 
 local function ast_tostring(ast, a)
@@ -28,12 +37,44 @@ local function ast_tostring(ast, a)
   else
 	  res = { "{" }
   end
-	for k,v in ipairs(ast) do
+	for k, v in ipairs(ast) do
 		table.insert(res,white .. ast_tostring(v, a + 1))
 	end
 	white = white:sub(3)
 	table.insert(res,white .. "}")
 	return table.concat(res, "\n")
+end
+
+local animagus = {}
+
+function animagus.reduce(scope, reducer, initial, list)
+  return {
+    t = "REDUCE",
+    children = {
+      scope:compile_function(reducer),
+      scope:compile_expr(initial),
+      scope:compile_expr(list)
+    }
+  }
+end
+
+function animagus.map(scope, transform, list)
+  return {
+    t = "MAP",
+    children = {
+      scope:compile_function(transform),
+      scope:compile_expr(list)
+    }
+  }
+end
+
+function animagus.query_cells(scope, filter)
+  return {
+    t = "QUERY_CELLS",
+    children = {
+      scope:compile_function(filter)
+    }
+  }
 end
 
 local Scope = {}
@@ -75,93 +116,143 @@ function Scope:eval_stat(stat)
 end
 
 function Scope:compile_call(expr)
-  if expr.tag == "Id" then
-    var = self.vars[expr[1]]
-    var.compiled = var.compiled or self:compile_call(var.expr)
-    return var.compiled
-  end
-  if expr.tag == "Function" then
-    for i, ident in ipairs(expr[1]) do
-      if ident.tag == "Id" then
-        self.vars[ident] = { compiled = { t = "PARAM", u = i - 1 } }
-      end
+  expr = self:resolve_expr(expr).expr
+  assert(expr.tag == "Function", "invalid compile_call " .. ast_tostring(expr))
+  for i, ident in ipairs(expr[1]) do
+    if ident.tag == "Id" then
+      self.vars[ident[1]] = { compiled = { t = "PARAM", u = i - 1 } }
     end
-    scope = self:push()
-    for _, stat in ipairs(expr[2]) do
-      scope:eval_stat(stat)
-    end
-    return scope:compile_expr(scope.ret.expr[1])
   end
-  assert(false, "unknown compile_call " .. tostring(expr.tag) .. ": " .. ast_tostring(expr))
+  local scope = self:push()
+  for _, stat in ipairs(expr[2]) do
+    scope:eval_stat(stat)
+  end
+  return scope:compile_expr(scope.ret.expr[1])
 end
 
-function Scope:compile_reduce(reducer, initial, list)
-  return {
-    t = "REDUCE",
-    children = {
-      self:compile_reducer(reducer),
-      self:compile_expr(initial),
-      self:compile_expr(list)
-    }
-  }
-end
+function Scope:compile_function(f)
+  f = self:resolve_expr(f)
+  local parent_scope = f.scope
+  local expr = f.expr
 
-function Scope:compile_map(transform, list)
-  return {
-    t = "MAP",
-    children = {
-      self:compile_mapper(transform),
-      self:compile_expr(list)
-    }
-  }
-end
+  --| `Function{ { ident* `Dots? } block }
+  assert(expr.tag == "Function", "Unknown compile_function " .. ast_tostring(expr))
+  local scope = parent_scope:push()
+  local args, block = unpack(expr)
+  for i, a in ipairs(args) do
+    scope.vars[a[1]] = { compiled = { t = "ARG", u = i - 1 } }
+  end
+  for _, stat in ipairs(block) do
+    scope:eval_stat(stat)
+  end
 
-function Scope:compile_query_cells(filter)
-  return {
-    t = "QUERY_CELLS",
-    children = {
-      self:compile_cell_filter(filter)
-    }
-  }
-end
-
-function Scope:compile_reducer(reducer)
-  -- TODO
-  return { t = "REDUCER" }
-end
-
-function Scope:compile_mapper(mapper)
-  -- TODO
-  return { t = "MAPPER" }
-end
-
-function Scope:compile_cell_filter(filter)
-  -- TODO
-  return { t = "FILTER" }
+  return scope:compile_expr(scope.ret.expr[1])
 end
 
 function Scope:compile_expr(expr)
+  if expr.tag == "Id" then
+    local var = self.vars[expr[1]]
+    var.compiled = var.compiled or self:compile_expr(var.expr)
+    return var.compiled
+  end
   if expr.tag == "Call" then
-    if expr[1][1][1] == "animagus" then
-      local method = "compile_" .. expr[1][2][1]
-      assert(self[method], "Unknown ast call " .. ast_tostring(expr))
-      return self[method](self, unpack(expr, 2))
+    -- `Call{ expr expr* }
+    local callee = assert(self:resolve_expr(expr[1]), "Unknown callee " .. ast_tostring(expr[1]))
+    if type(callee) == "function" then
+      return callee(self, unpack(expr, 2))
+    else
+      assert(false, "Function not allowed here " .. ast_tostring(expr))
     end
-
-    assert(expr[1].tag == "Id")
-    -- TODO
-    -- self:call(unpack(expr))
-    return {todo=true}
   end
   if expr.tag == "Number" then
     return { t = "UINT64", u = expr[1] }
+  end
+  if expr.tag == "String" then
+    return { t = "BYTES", raw = expr[1] }
+  end
+  if expr.tag == "Op" then
+    local animagus_op = OP_TABLE[expr[1]]
+    if animagus_op then
+      return { t = animagus_op, children = {
+        self:compile_expr(expr[2]),
+        self:compile_expr(expr[3])
+      }}
+    end
+  end
+  if expr.tag == "Index" then
+    local target, index = unpack(expr)
+
+    target = self:compile_expr(target)
+    if index[1] == "capacity" then
+      assert(target.t == "ARG")
+      return { t = "GET_CAPACITY", children = target }
+    end
+    if index[1] == "lock" then
+      assert(target.t == "ARG")
+      return { t = "GET_LOCK", children = target }
+    end
+    if index[1] == "code_hash" then
+      assert(target.t == "ARG" or target.t == "GET_LOCK")
+      return { t = "GET_CODE_HASH", children = target }
+    end
+    if index[1] == "hash_type" then
+      assert(target.t == "ARG" or target.t == "GET_LOCK")
+      return { t = "GET_HASH_TYPE", children = target }
+    end
+    if index[1] == "args" then
+      assert(target.t == "ARG" or target.t == "GET_LOCK" or target.t == "GET_TYPE")
+      return { t = "GET_ARGS", children = target }
+    end
   end
 
   assert(false, "unknown compile_expr " .. tostring(expr.tag) .. ": " .. ast_tostring(expr))
 end
 
-function main(input_path, output_path, format)
-  local mlc = require 'metalua.compiler'.new()
+function Scope:resolve_expr(expr)
+  if expr.tag == "Id" then
+    local found = self.vars[expr[1]]
+    if not found then
+      if expr[1] == "animagus" then
+        found = animagus
+      end
+    end
+    return found
+  end
+
+  if expr.tag == "Index" then
+    local tab = assert(self:resolve_expr(expr[1]), "invalid table " .. ast_tostring(expr[1]))
+    if tab.expr then
+      assert(tab.expr.tag == "Table")
+      for _, p in ipairs(tab.expr) do
+        local k, v = unpack(p)
+        if k[1] == expr[2][1] then
+          return { scope = tab.scope, expr = v }
+        end
+      end
+    else
+      return tab[expr[2][1]]
+    end
+  end
+
+  if expr.tag == "Call" then
+    local callee = assert(self:resolve_expr(expr[1]))
+    assert(callee.expr.tag == "Function")
+    local scope = callee.scope:push()
+    local args, block = unpack(callee.expr)
+    for i, a in ipairs(args) do
+      scope.vars[a[1]] = self:resolve_expr(expr[i + 1])
+    end
+    for _, stat in ipairs(block) do
+      scope:eval_stat(stat)
+    end
+    return { scope = scope.ret.scope, expr = scope.ret.expr[1] }
+  end
+
+  return { scope = self, expr = expr }
+end
+
+local function main(input_path, output_path, format)
+  local mlc = MetaluaCompiler.new()
   local ast = mlc:srcfile_to_ast(input_path)
 
   local root_scope = Scope.new()
@@ -173,7 +264,7 @@ function main(input_path, output_path, format)
   local root_ast = root_scope.ret.expr[1]
   assert(root_ast and root_ast.tag == "Table")
 
-  animagus_ast = {
+  local animagus_ast = {
     calls = {},
     streams = {}
   }
@@ -183,14 +274,13 @@ function main(input_path, output_path, format)
     if kv[1][1] == "calls" then
       for _, call_pair in ipairs(kv[2]) do
         assert(call_pair.tag == "Pair")
-        k, v = unpack(call_pair)
+        local k, v = unpack(call_pair)
         assert(k.tag == "String")
         table.insert(animagus_ast.calls, { name = k[1], result = root_scope:compile_call(v) })
       end
     end
   end
 
-  local json = require "json"
   print(json.encode(animagus_ast))
 end
 
