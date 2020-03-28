@@ -1,22 +1,6 @@
 local json = require "json"
 local MetaluaCompiler = require "metalua.compiler"
 
-local STAT_TAGS = {
-  Do = true,
-  Set = true,
-  While = true,
-  Repeat = true,
-  If = true,
-  Fornum = true,
-  Forin = true,
-  Local = true,
-  Localrec = true,
-  Goto = true,
-  Label = true,
-  Return = true,
-  Break = true
-}
-
 local OP_TABLE = {
   add = "ADD",
   ["and"] = "AND",
@@ -203,38 +187,8 @@ function Scope:compile_expr(expr)
     local target, index = unpack(expr)
 
     target = self:compile_expr(target)
-    if index[1] == "capacity" then
-      assert(target.t == "ARG")
-      return { t = "GET_CAPACITY", children = target }
-    end
-    if index[1] == "lock" then
-      assert(target.t == "ARG")
-      return { t = "GET_LOCK", children = target }
-    end
-    if index[1] == "type" then
-      assert(target.t == "ARG")
-      return { t = "GET_TYPE", children = target }
-    end
-    if index[1] == "code_hash" then
-      assert(target.t == "ARG" or target.t == "GET_LOCK" or target.t == "GET_TYPE")
-      return { t = "GET_CODE_HASH", children = target }
-    end
-    if index[1] == "hash_type" then
-      assert(target.t == "ARG" or target.t == "GET_LOCK" or target.t == "GET_TYPE")
-      return { t = "GET_HASH_TYPE", children = target }
-    end
-    if index[1] == "args" then
-      assert(target.t == "ARG" or target.t == "GET_LOCK" or target.t == "GET_TYPE")
-      return { t = "GET_ARGS", children = target }
-    end
-    if index[1] == "data" then
-      assert(target.t == "ARG")
-      return { t = "GET_DATA", children = target }
-    end
-    if index[1] == "data_hash" then
-      assert(target.t == "ARG")
-      return { t = "GET_DATA_HASH", children = target }
-    end
+    local t = "GET_" .. index[1]:upper()
+    return { t = t, children = target }
   end
 
   assert(false, "unknown compile_expr " .. tostring(expr.tag) .. ": " .. ast_tostring(expr))
