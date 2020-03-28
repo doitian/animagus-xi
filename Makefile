@@ -23,12 +23,17 @@ clean:
 check-lua-global:
 	! luac -p -l animagus-lua/compiler.lua | grep 'SETTABUP.*_ENV' | grep -v '_ENV "\(ipairs\|assert\|pairs\|unpack\|tostring\|require\|arg\|table\|setmetatable\|type\|print\)"'
 
+stat:
+	wc -l -c animagus-dot/main.go animagus-lua/compiler.lua animagus-lua/examples/*
+
 step1: clean test
 
-step2:
-	lua5.1 animagus-lua/compiler.lua animagus-lua/examples/balance.lua | jq .
+step2: stat
 
 step3:
+	lua5.1 animagus-lua/compiler.lua animagus-lua/examples/balance.lua | jq .
+
+step4:
 	lua5.1 animagus-lua/compiler.lua animagus-lua/examples/simple_udt.lua | jq .
 
-.PHONY: default test test-dot clean step1 step2 step3
+.PHONY: default test test-dot clean stat step1 step2 step3 step4
