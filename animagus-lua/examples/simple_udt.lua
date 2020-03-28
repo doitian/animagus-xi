@@ -27,7 +27,7 @@ end
 
 local function balance(sudt_arg, lock_arg)
   local cells = animagus.query_cells(function(cell)
-    return filter_secp256k1_by_lock_arg(cell, lock_arg) and filter_sudt_by_type_arg(cell, lock_arg)
+    return filter_secp256k1_by_lock_arg(cell, lock_arg) and filter_sudt_by_type_arg(cell, sudt_arg)
   end)
 
   local tokens = animagus.map(
