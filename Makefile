@@ -21,7 +21,7 @@ clean:
 	rm -f animagus-dot/*.pdf animagus-dot/*.bin animagus-dot/*.dot
 
 check-lua-global:
-	luac -p -l animagus-lua/compiler.lua | grep -o '_ENV.*' | sort | uniq
+	! luac -p -l animagus-lua/compiler.lua | grep 'SETTABUP.*_ENV' | grep -v '_ENV "\(ipairs\|assert\|pairs\|unpack\|tostring\|require\|arg\|table\|setmetatable\|type\|print\)"'
 
 step1: clean test
 

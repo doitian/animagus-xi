@@ -3,6 +3,10 @@ local MetaluaCompiler = require "metalua.compiler"
 
 local OP_TABLE = {
   add = "ADD",
+  sub = "SUBTRACT",
+  mul = "MULTIPLY",
+  div = "DIVIDE",
+  mod = "MOD",
   ["and"] = "AND",
   eq = "EQUAL"
 }
@@ -72,6 +76,90 @@ function animagus.slice(scope, target, start, length)
   }
 end
 
+function animagus.index(scope, pos, target)
+  return {
+    t = "INDEX",
+    children = {
+      scope:compile_expr(pos),
+      scope:compile_expr(target),
+    }
+  }
+end
+
+
+function animagus.serialize_to_core(scope, target)
+  return {
+    t = "SERIALIZE_TO_CORE",
+    children = {
+      scope:compile_expr(target)
+    }
+  }
+end
+
+function animagus.serialize_to_json(scope, target)
+  return {
+    t = "SERIALIZE_TO_JSON",
+    children = {
+      scope:compile_expr(target)
+    }
+  }
+end
+
+local function make_constructor(t, keys)
+  return function(scope, tab)
+    assert(tab.tag == "Table")
+    local children = {}
+    for _, p in ipairs(tab) do
+      local k, v = unpack(p)
+      local pos = assert(keys[k[1]])
+      children[pos] = scope:compile_expr(v)
+    end
+    for _, pos in pairs(keys) do
+      children[pos] = children[pos] or nil
+    end
+    return { t = t, children = children }
+  end
+end
+
+animagus.transaction = make_constructor("TRANSACTION", {
+  inputs = 1,
+  outputs = 2,
+  cell_deps = 3
+})
+
+animagus.cell = make_constructor("CELL", {
+  capacity = 1,
+  lock = 2,
+  type = 3,
+  data = 4
+})
+
+animagus.script = make_constructor("SCRIPT", {
+  code_hash = 1,
+  hash_type = 2,
+  args = 3,
+})
+
+animagus.cell_dep = make_constructor("CELL_DEP", {
+  out_point = 1,
+  dep_type = 2,
+})
+
+animagus.out_point = make_constructor("OUT_POINT", {
+  tx_hash = 1,
+  index = 2,
+})
+
+-- TODO: Uint64 may overflow in Lua
+function animagus.ckbytes(scope, number)
+  assert(number.tag == "Number")
+  return { t = "UINT64", u = number[1] * 100000000 }
+end
+
+function animagus.shannons(scope, number)
+  return scope:compile_expr(number)
+end
+
 function animagus.G.len(scope, expr)
   return {
     t = "LEN",
@@ -83,17 +171,19 @@ end
 
 local Scope = {}
 
-function Scope.new(parent_scope)
-  local scope = { vars = {}, parent = parent_scope, ret = nil }
-  setmetatable(scope, { __index = Scope })
+function Scope.new(parent_scope, info)
+  local vars = {}
   if parent_scope ~= nil then
-    setmetatable(scope.vars, { __index = parent_scope.vars })
+    setmetatable(vars, { __index = parent_scope.vars })
   end
+
+  local scope = { info = info, vars = vars, parent = parent_scope, ret = nil }
+  setmetatable(scope, { __index = Scope })
   return scope
 end
 
-function Scope:push()
-  return Scope.new(self)
+function Scope:push(info)
+  return Scope.new(self, info)
 end
 
 function Scope:eval_stat(stat)
@@ -127,7 +217,7 @@ function Scope:compile_call(expr)
       self.vars[ident[1]] = { compiled = { t = "PARAM", u = i - 1 } }
     end
   end
-  local scope = self:push()
+  local scope = self:push(tostring(expr.lineinfo))
   for _, stat in ipairs(expr[2]) do
     scope:eval_stat(stat)
   end
@@ -141,7 +231,7 @@ function Scope:compile_function(f)
 
   --| `Function{ { ident* `Dots? } block }
   assert(expr.tag == "Function", "Unknown compile_function " .. ast_tostring(expr))
-  local scope = parent_scope:push()
+  local scope = parent_scope:push(tostring(expr.lineinfo))
   local args, block = unpack(expr)
   for i, a in ipairs(args) do
     scope.vars[a[1]] = { compiled = { t = "ARG", u = i - 1 } }
@@ -155,8 +245,8 @@ end
 
 function Scope:compile_expr(expr)
   if expr.tag == "Id" then
-    local var = assert(self.vars[expr[1]], "var " .. expr[1] .. " does not exist")
-    var.compiled = var.compiled or self:compile_expr(var.expr)
+    local var = assert(self.vars[expr[1]], "var " .. expr[1] .. " does not exist: " .. tostring(expr.lineinfo))
+    var.compiled = var.compiled or var.scope:compile_expr(var.expr)
     return var.compiled
   end
   if expr.tag == "Call" then
@@ -189,6 +279,17 @@ function Scope:compile_expr(expr)
     target = self:compile_expr(target)
     local t = "GET_" .. index[1]:upper()
     return { t = t, children = target }
+  end
+  if expr.tag == "Table" then
+    local children = {}
+    for _, e in ipairs(expr) do
+      assert(e.tag ~= "Pair", "Associate Table not supported")
+      table.insert(children, self:compile_expr(e))
+    end
+    return { t = "LIST", children = children }
+  end
+  if expr.tag == "Paren" then
+    return self:compile_expr(expr[1])
   end
 
   assert(false, "unknown compile_expr " .. tostring(expr.tag) .. ": " .. ast_tostring(expr))
@@ -226,7 +327,7 @@ function Scope:resolve_expr(expr)
   if expr.tag == "Call" then
     local callee = assert(self:resolve_expr(expr[1]))
     assert(callee.expr.tag == "Function")
-    local scope = callee.scope:push()
+    local scope = callee.scope:push(tostring(callee.expr.lineinfo))
     local args, block = unpack(callee.expr)
     for i, a in ipairs(args) do
       scope.vars[a[1]] = self:resolve_expr(expr[i + 1])
@@ -242,7 +343,7 @@ end
 
 function Scope:call(callee, call)
   assert(callee.expr.tag == "Function")
-  local scope = callee.scope:push()
+  local scope = callee.scope:push(tostring(callee.expr.lineinfo))
   local args, block = unpack(callee.expr)
 
   for i, a in ipairs(args) do
@@ -288,6 +389,4 @@ local function main(input_path, output_path, format)
   print(json.encode(animagus_ast))
 end
 
-local format = "proto"
-local input_path
 main(arg[1], arg[2])
